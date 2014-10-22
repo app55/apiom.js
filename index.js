@@ -199,7 +199,7 @@ module.exports = function(model, prototype) {
 
     Object.keys(prototype).forEach(function(key) {
         if(key[0] === '$') {
-            var methodName = key.substring(1).match(/[A-Z][^A-Z]+/g).map(function(token) {
+            var methodName = key.substring(1).split(/[A-Z][^A-Z]*/g).map(function(token) {
                 return token.toLowerCase();
             }).join('-');
 
@@ -270,7 +270,7 @@ module.exports = function(model, prototype) {
                     break;
             }
         } else {
-            var methodName = key.match(/[A-Z][^A-Z]+/g).map(function(token) {
+            var methodName = key.split(/[A-Z][^A-Z]*/g).map(function(token) {
                 return token.toLowerCase();
             }).join('-');
 
