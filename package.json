@@ -1,0 +1,23 @@
+{
+  "name": "apiom",
+  "version": "3.0.0",
+  "description": "API Object Model for JavaScript",
+  "main": "index.js",
+  "scripts": {
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/app55/apiom.js"
+  },
+  "keywords": [
+    "api",
+    "object",
+    "model"
+  ],
+  "author": "Tim Behrsin <tim.behrsin@app55.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/app55/apiom.js/issues"
+  },
+  "homepage": "https://github.com/app55/apiom.js"
+}
