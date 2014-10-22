@@ -1,4 +1,9 @@
 
+var fs = require('fs');
+var esprima = require('esprima');
+var estraverse = require('estraverse');
+var doctrine = require('doctrine');
+
 var routerConstructor = function() {
     return require('express').Router();
 };
@@ -52,7 +57,230 @@ var pluralize = function(name) {
     return name + 's';
 }
 
+var parseJsDoc = function(filePath, offset, model, prototype) {
+
+    var baseName = model.modelName.match(/[A-Z][^A-Z]+/g).map(function(token) {
+        return token.toLowerCase();
+    }).join('-');
+    var paramName = model.modelName[0].toLowerCase() + model.modelName.substring(1);
+
+    var document = fs.readFileSync(filePath);
+    try {
+        var ast = esprima.parse(document, {
+            tokens: true,
+            comment: true,
+            range: true
+        });
+    } catch(e) {
+        console.error(e.stack);
+        return {};
+    }
+
+    var docs = {};
+
+    var parse = function(node) {
+        return node && node.leadingComments && node.leadingComments.filter(function(comment) {
+            return comment.type === 'Block';
+        }).map(function(comment) {
+            return comment.value.toString()
+        }).filter(function(comment) {
+            return /^\*/.test(comment);
+        }).map(function(comment) {
+            return comment.split(/\n|\r\n/g).map(function(line) {
+                return line.replace(/^\s*\*\s*/, '').trim();
+            }).join('\r\n').replace(/^\r\n/, '').replace(/\r\n$/, '');
+        }).join('\r\n') || null
+    };
+
+    estraverse.attachComments(ast, ast.comments, ast.tokens);
+    estraverse.traverse(ast, {
+        enter: function(node, parent) {
+            node.parent = parent;
+
+            if(node.type === 'CallExpression' && node.range[0] < offset && node.range[1] > offset) {
+                var p = node;
+                while((!p.leadingComments || p.leadingComments.filter(function(comment) {
+                    return comment.type === 'Block' && /^\*/.test(comment.value.toString());
+                }).length) && p.parent.type !== 'Program') p = p.parent;
+
+                var doc = parse(p);
+                doc = doc && doctrine.parse(doc);
+
+                var title = doc && doc.tags.filter(function(tag) {
+                    return tag.title === 'title';
+                }).map(function(tag) {
+                    return tag.description
+                })[0] || pluralize(model.modelName);
+
+                docs.model = model.modelName;
+                docs.description = doc && doc.description.split(/\n|\r\n/)[0];
+                docs.title = title;
+                docs.text = doc && doc.description;
+                docs.methods = [];
+
+                node.arguments[1].properties.forEach(function(node) {
+                    var name = node.key.name, accessor, method, url;
+
+
+
+                    if(name[0] === '$') {
+                        name = name.substring(1);
+                        var methodName = name.match(/(^|[A-Z])[^A-Z]*/g).map(function(token) {
+                            return token.toLowerCase();
+                        }).join('-');
+
+                        accessor = 'static';
+                        switch(name) {
+                            case 'create':
+                                method = 'POST';
+                                url = '/' + baseName;
+                                break;
+                            case 'find':
+                                method = 'GET';
+                                url = '/' + baseName;
+                                break;
+                            case 'findOne':
+                                method = 'GET';
+                                url = '/' + baseName + '/:' + paramName;
+                                break;
+                            default:
+                                method = 'POST';
+                                url = '/' + baseName + '/' + methodName;
+                                break;
+                        }
+                    } else {
+                        var methodName = name.match(/(^|[A-Z])[^A-Z]*/g).map(function(token) {
+                            return token.toLowerCase();
+                        }).join('-');
+                        accessor = 'instance';
+                        switch(name) {
+                            case 'createChild':
+                                method = 'POST';
+                                url = '/' + baseName + '/:' + paramName + '/children';
+                                break;
+                            case 'children':
+                                method = 'GET';
+                                url = '/' + baseName + '/:' + paramName + '/children';
+                                break;
+                            case 'descendants':
+                                method = 'GET';
+                                url = '/' + baseName + '/:' + paramName + '/descendants';
+                                break;
+                            case 'save':
+                                method = 'POST';
+                                url = '/' + baseName + '/:' + paramName;
+                                break;
+                            case 'delete':
+                                method = 'DELETE';
+                                url = '/' + baseName + '/:' + paramName;
+                                break;
+                            default:
+                                method = 'POST';
+                                url = '/' + baseName + '/:' + paramName + '/' + methodName;
+                                break;
+                        }
+                    }
+
+                    var urlParams = [], inUrl;
+                    var formParams = [], inForm;
+                    var queryParams = [], inQuery;
+
+                    var doc = parse(node);
+                    doc = doc && doctrine.parse(doc);
+
+                    doc.tags.forEach(function(tag) {
+                        if(tag.title === 'url' && !inUrl) inUrl = true;
+                        if(tag.title === 'endurl' && inUrl) inUrl = false;
+                        if(tag.title === 'form' && !inUrl) inForm = true;
+                        if(tag.title === 'endform' && inUrl) inForm = false;
+                        if(tag.title === 'query' && !inUrl) inQuery = true;
+                        if(tag.title === 'endquery' && inUrl) inQuery = false;
+
+                        if(tag.title === 'param') {
+
+                            var type = tag.type;
+
+                            switch(type.type) {
+                                case 'NameExpression':
+                                    type = {
+                                        name: type.name
+                                    };
+                                    break;
+                                case 'TypeApplication':
+                                    type = {
+                                        name: type.expression.name + '<' + type.applications.map(function(type) {
+                                            return type.name;
+                                        }).join(', ') + '>'
+                                    };
+                                    break;
+                            }
+
+                            var param = {
+                                name: tag.name,
+                                description: tag.description,
+                                type: type
+                            };
+
+                            if(inUrl) urlParams.push(param);
+                            if(inForm) formParams.push(param);
+                            if(inQuery) queryParams.push(param);
+                        }
+                    });
+
+                    docs.methods.push({
+                        accessor: accessor,
+                        name: name,
+                        method: method,
+                        url: url,
+                        description: doc && doc.description.split(/\n|\r\n/)[0],
+                        title: doc && doc.tags.filter(function(tag) {
+                            return tag.title === 'title';
+                        }).map(function(tag) {
+                            return tag.description
+                        })[0],
+                        text: doc && doc.description,
+                        permissions: doc && doc.tags.filter(function(tag) {
+                            return tag.title === 'permission';
+                        }).map(function(tag) {
+                            var name = tag.description.trim().match(/^\s*(\w+)\s+(\(optional\)\s+)?(.*)$/);
+                            var description = name[3].trim();
+                            var optional = name[2] && true || false;
+                            name = name[1].trim();
+
+                            return {
+                                name: name,
+                                description: description,
+                                optional: optional
+                            };
+                        }),
+                        params: {
+                            url: urlParams,
+                            query: queryParams,
+                            form: formParams
+                        }
+                    });
+                });
+            }
+
+
+        }
+    });
+
+    return docs;
+};
+
 module.exports = function(model, prototype) {
+
+    var orig = Error.prepareStackTrace;
+    Error.prepareStackTrace = function(_, stack) {
+        return stack;
+    };
+    var err = new Error;
+    Error.captureStackTrace(err, arguments.callee);
+    var stack = err.stack;
+    Error.prepareStackTrace = orig;
+
+
     var baseName = model.modelName.match(/[A-Z][^A-Z]+/g).map(function(token) {
         return token.toLowerCase();
     }).join('-');
@@ -60,7 +288,8 @@ module.exports = function(model, prototype) {
 
     var catalogEntry = {
         model: model.modelName,
-        methods: []
+        methods: [],
+        docs: parseJsDoc(stack[1].receiver.filename, stack[0].pos, model, prototype)
     };
     catalog.push(catalogEntry);
 
@@ -105,6 +334,7 @@ module.exports = function(model, prototype) {
                                 code: err.code
                             } };
                         } else {
+                            console.error(err.stack);
                             jso = { error: { type: 'server-error' } };
                         }
                     } else {
@@ -127,7 +357,7 @@ module.exports = function(model, prototype) {
                     res.send(json);
                 });
             } catch(e) {
-                console.error(e);
+                console.error(e.stack);
                 var json = JSON.stringify({ error: { type: 'server-error' }});
 
                 res.set('Content-Type', 'application/json');
@@ -165,6 +395,7 @@ module.exports = function(model, prototype) {
                                 code: err.code
                             } };
                         } else {
+                            console.error(err.stack);
                             jso = { error: { type: 'server-error' } };
                         }
                     } else {
@@ -187,7 +418,7 @@ module.exports = function(model, prototype) {
                     res.send(json);
                 });
             } catch(e) {
-                console.error(e);
+                console.error(e.stack);
                 var json = JSON.stringify({ error: { type: 'server-error' }});
 
                 res.set('Content-Type', 'application/json');
@@ -199,11 +430,11 @@ module.exports = function(model, prototype) {
 
     Object.keys(prototype).forEach(function(key) {
         if(key[0] === '$') {
-            var methodName = key.substring(1).split(/[A-Z][^A-Z]*/g).map(function(token) {
+            var methodName = key.substring(1).match(/(^|[A-Z])[^A-Z]*/g).map(function(token) {
                 return token.toLowerCase();
             }).join('-');
 
-            switch(methodName) {
+            switch(key) {
                 case '$create':
                     router.post('/' + baseName, staticHandler(prototype.$create));
                     catalogEntry.methods.push({
@@ -248,7 +479,7 @@ module.exports = function(model, prototype) {
                         accessor: 'static',
                         name: 'findOne',
                         method: 'GET',
-                        url: '/' + baseName + '/{' + paramName + '}'
+                        url: '/' + baseName + '/:' + paramName
                     });
                     constructor.findOne = function(user, id, next) {
                         var query = {};
@@ -270,11 +501,11 @@ module.exports = function(model, prototype) {
                     break;
             }
         } else {
-            var methodName = key.split(/[A-Z][^A-Z]*/g).map(function(token) {
+            var methodName = key.match(/(^|[A-Z])[^A-Z]*/g).map(function(token) {
                 return token.toLowerCase();
             }).join('-');
 
-            switch(methodName) {
+            switch(key) {
                 case 'createChild':
                     router.post('/' + baseName + '/:' + paramName + '/children', instanceHandler(prototype.createChild));
                     catalogEntry.methods.push({
@@ -403,7 +634,7 @@ var catalog = [];
 module.exports.catalog = function(baseUrl) {
     baseUrl = baseUrl || '/';
 
-    var rebasedCatalog = catalog.map(function(entry) {
+    var rebasedCatalog = JSON.stringify(catalog.map(function(entry) {
         return {
             model: entry.model,
             methods: entry.methods.map(function(method) {
@@ -415,17 +646,46 @@ module.exports.catalog = function(baseUrl) {
                 };
             })
         };
-    });
+    }));
+
+    var docCatalog = JSON.stringify(catalog.map(function(entry) {
+        return {
+            model: entry.docs.model,
+            description: entry.docs.description,
+            title: entry.docs.title,
+            text: entry.docs.text,
+            methods: entry.docs.methods.map(function(method) {
+                return {
+                    accessor: method.accessor,
+                    name: method.name,
+                    method: method.method,
+                    url: baseUrl + method.url,
+                    description: method.description,
+                    title: method.title,
+                    text: method.text,
+                    permissions: method.permissions,
+                    params: method.params
+                };
+            })
+        };
+    }));
 
     var router = routerConstructor();
     router.get(baseUrl + '/catalog', function(req, res) {
-        var json = JSON.stringify(rebasedCatalog);
+        var json = rebasedCatalog;
         res.set('Content-Type', 'application/json');
         res.set('Content-Length', json.length);
         res.send(json);
     });
+    router.get(baseUrl + '/catalog.doc', function(req, res) {
+        var json = docCatalog;
+        res.set('Content-Type', 'application/json');
+        res.set('Content-Length', json.length);
+        res.send(json);
+    });
+
     catalog.forEach(function(entry) {
-        router.use(entry.router);
+        router.use(baseUrl, entry.router);
     });
 
     return router;

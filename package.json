@@ -1,10 +1,9 @@
 {
   "name": "apiom",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "description": "API Object Model for JavaScript",
   "main": "index.js",
-  "scripts": {
-  },
+  "scripts": {},
   "repository": {
     "type": "git",
     "url": "https://github.com/app55/apiom.js"
@@ -19,5 +18,11 @@
   "bugs": {
     "url": "https://github.com/app55/apiom.js/issues"
   },
-  "homepage": "https://github.com/app55/apiom.js"
+  "homepage": "https://github.com/app55/apiom.js",
+  "dependencies": {
+    "doctrine": "^0.5.2",
+    "esprima": "^1.2.2",
+    "estraverse": "^1.7.0",
+    "marked": "^0.3.2"
+  }
 }
