@@ -55,7 +55,7 @@ var pluralize = function(name) {
     if(name.substring(name.length - 1) === 'x') return name + 'es';
     if(name.substring(name.length - 1) === 's') return name + 'es';
     return name + 's';
-}
+};
 
 var parseJsDoc = function(filePath, offset, model, prototype) {
 
@@ -289,9 +289,26 @@ module.exports = function(model, prototype) {
     var catalogEntry = {
         model: model.modelName,
         methods: [],
+        fields: { id: { type: 'ID', ref: model.modelName } },
         docs: parseJsDoc(stack[1].receiver.filename, stack[0].pos, model, prototype)
     };
     catalog.push(catalogEntry);
+
+    model.schema.eachPath(function(path, schemaType) {
+        if(path[0] === '_') return;
+        if(schemaType.options.hidden) return;
+
+        if(schemaType.options.type === Boolean)
+            catalogEntry.fields[path] = { type: 'Boolean' };
+        else if(schemaType.options.type === Number)
+            catalogEntry.fields[path] = { type: 'Number' };
+        else if(schemaType.options.type === String)
+            catalogEntry.fields[path] = { type: 'String' };
+        else if(schemaType.instance === 'ObjectID')
+            catalogEntry.fields[path] = { type: 'ID', ref: schemaType.options.ref };
+        else
+            catalogEntry.fields[path] = { type: schemaType.instance, ref: schemaType.options.ref };
+    });
 
     var router = routerConstructor();
     catalogEntry.router = router;
@@ -323,7 +340,7 @@ module.exports = function(model, prototype) {
             }
 
             try {
-                method.call(constructor, user, query, function (err, object) {
+                method.call(constructor, { user: user, query: query }, function (err, object) {
                     var jso;
 
                     if (err) {
@@ -384,7 +401,7 @@ module.exports = function(model, prototype) {
             }
 
             try {
-                method.call({ id: req.params[paramName] }, user, query, function (err, object) {
+                method.call({ id: req.params[paramName] }, { user: user, query: query }, function (err, object) {
                     var jso;
 
                     if (err) {
@@ -637,12 +654,13 @@ module.exports.catalog = function(baseUrl) {
     var rebasedCatalog = JSON.stringify(catalog.map(function(entry) {
         return {
             model: entry.model,
+            fields: entry.fields,
             methods: entry.methods.map(function(method) {
                 return {
                     accessor: method.accessor,
                     name: method.name,
                     method: method.method,
-                    url: baseUrl + method.url
+                    url: method.url
                 };
             })
         };
@@ -651,6 +669,7 @@ module.exports.catalog = function(baseUrl) {
     var docCatalog = JSON.stringify(catalog.map(function(entry) {
         return {
             model: entry.docs.model,
+            fields: entry.docs.fields,
             description: entry.docs.description,
             title: entry.docs.title,
             text: entry.docs.text,
@@ -659,7 +678,7 @@ module.exports.catalog = function(baseUrl) {
                     accessor: method.accessor,
                     name: method.name,
                     method: method.method,
-                    url: baseUrl + method.url,
+                    url: method.url,
                     description: method.description,
                     title: method.title,
                     text: method.text,
