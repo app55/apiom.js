@@ -492,7 +492,7 @@ module.exports = function(model, prototype) {
                     break;
                 case '$findOne':
                     router.get('/' + baseName + '/:' + paramName, function(req, res) {
-                        (res.query[paramName] = {}).id = req.params[paramName];
+                        (req.query[paramName] = {}).id = req.params[paramName];
                         staticHandler(prototype.$findOne)(req, res);
                     });
                     catalogEntry.methods.push({
