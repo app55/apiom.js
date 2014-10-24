@@ -298,16 +298,36 @@ module.exports = function(model, prototype) {
         if(path[0] === '_') return;
         if(schemaType.options.hidden) return;
 
+
         if(schemaType.options.type === Boolean)
             catalogEntry.fields[path] = { type: 'Boolean' };
         else if(schemaType.options.type === Number)
             catalogEntry.fields[path] = { type: 'Number' };
         else if(schemaType.options.type === String)
             catalogEntry.fields[path] = { type: 'String' };
+        else if(schemaType.options.type === Date)
+            catalogEntry.fields[path] = { type: 'Date' };
         else if(schemaType.instance === 'ObjectID')
             catalogEntry.fields[path] = { type: 'ID', ref: schemaType.options.ref };
-        else
+        else if(Array.isArray(schemaType.options.type)) {
+            schemaType.options.type = schemaType.options.type[0].type;
+
+            if(schemaType.options.type === Boolean)
+                catalogEntry.fields[path] = { type: 'Boolean' };
+            else if(schemaType.options.type === Number)
+                catalogEntry.fields[path] = { type: 'Number' };
+            else if(schemaType.options.type === String)
+                catalogEntry.fields[path] = { type: 'String' };
+            else if(schemaType.options.type === Date)
+                catalogEntry.fields[path] = { type: 'Date' };
+            else if(schemaType.caster.instance === 'ObjectID')
+                catalogEntry.fields[path] = { type: 'ID', ref: schemaType.options.ref };
+
+            catalogEntry.fields[path].isArray = true;
+        } else {
+            console.info(schemaType.options.type);
             catalogEntry.fields[path] = { type: schemaType.instance, ref: schemaType.options.ref };
+        }
     });
 
     var router = routerConstructor();
