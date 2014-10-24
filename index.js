@@ -310,7 +310,7 @@ module.exports = function(model, prototype) {
         else if(schemaType.instance === 'ObjectID')
             catalogEntry.fields[path] = { type: 'ID', ref: schemaType.options.ref };
         else if(Array.isArray(schemaType.options.type)) {
-            schemaType.options.type = schemaType.options.type[0].type;
+            schemaType.options = schemaType.options.type[0];
 
             if(schemaType.options.type === Boolean)
                 catalogEntry.fields[path] = { type: 'Boolean' };
@@ -325,7 +325,6 @@ module.exports = function(model, prototype) {
 
             catalogEntry.fields[path].isArray = true;
         } else {
-            console.info(schemaType.options.type);
             catalogEntry.fields[path] = { type: schemaType.instance, ref: schemaType.options.ref };
         }
     });
