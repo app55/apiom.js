@@ -359,7 +359,7 @@ module.exports = function(model, prototype) {
             }
 
             try {
-                method.call(constructor, { user: user, query: query }, function (err, object) {
+                method.call(constructor, { headers: req.headers, user: user, query: query }, function (err, object) {
                     var jso;
 
                     if (err) {
@@ -420,7 +420,7 @@ module.exports = function(model, prototype) {
             }
 
             try {
-                method.call({ id: req.params[paramName] }, { user: user, query: query }, function (err, object) {
+                method.call({ id: req.params[paramName] }, { headers: req.headers, user: user, query: query }, function (err, object) {
                     var jso;
 
                     if (err) {
