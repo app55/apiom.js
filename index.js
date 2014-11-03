@@ -50,7 +50,7 @@ var expandMap = function(map) {
 };
 
 var pluralize = function(name) {
-    if(name.substring(name.length - 1) === 'y') return name.substring(0, name.length - 1) + 'ies';
+    if(name.substring(name.length - 1) === 'y' && name.substring(name.length - 2) !== 'ay') return name.substring(0, name.length - 1) + 'ies';
     if(name.substring(name.length - 2) === 'is') return name.substring(0, name.length - 2) + 'es';
     if(name.substring(name.length - 1) === 'x') return name + 'es';
     if(name.substring(name.length - 1) === 's') return name + 'es';
@@ -343,7 +343,7 @@ module.exports = function(model, prototype) {
     });
 
     var staticHandler = function(method) {
-        return function(req, res) {
+        return function(req, hres) {
             var user, query;
             if(req.method === 'GET') {
                 query = expandMap(req.query);
@@ -359,52 +359,99 @@ module.exports = function(model, prototype) {
             }
 
             try {
-                method.call(constructor, { headers: req.headers, user: user, query: query }, function (err, object) {
-                    var jso;
+                var filters = (pre['message'] || []).slice();
+                var next = function(err, req) {
+                    if(err) {
+                        console.error(e.stack);
+                        var json = JSON.stringify({ error: { type: 'server-error' }});
 
-                    if (err) {
-                        if(err.type) {
-                            jso = { error: {
-                                type: err.type,
-                                message: err.message,
-                                code: err.code
-                            } };
-                        } else {
-                            console.error(err.stack);
-                            jso = { error: { type: 'server-error' } };
-                        }
-                    } else {
-                        if(Array.isArray(object)) {
-                            jso = {
-                                length: typeof object.count === 'undefined' ? object.length : object.count,
-                                aggregates: object.aggregates
-                            };
-                            jso[pluralize(paramName)] = object;
-                        } else {
-                            jso = {};
-                            jso[paramName] = object;
-                        }
+                        hres.set('Content-Type', 'application/json');
+                        hres.set('Content-Length', json.length);
+                        hres.send(json);
+                        return;
                     }
 
-                    var json = JSON.stringify(jso);
+                    var filter = filters.shift();
+                    if (!filter) {
+                        method.call(constructor, req, function (err, object) {
+                            if(!req.rawResponse) {
+                                var jso;
 
-                    res.set('Content-Type', 'application/json');
-                    res.set('Content-Length', json.length);
-                    res.send(json);
-                });
+                                if (err) {
+                                    if (err.type) {
+                                        jso = { error: {
+                                            type: err.type,
+                                            message: err.message,
+                                            code: err.code
+                                        } };
+                                    } else {
+                                        console.error(err.stack);
+                                        jso = { error: { type: 'server-error' } };
+                                    }
+                                } else {
+                                    if (Array.isArray(object)) {
+                                        jso = {
+                                            length: typeof object.count === 'undefined' ? object.length : object.count,
+                                            aggregates: object.aggregates
+                                        };
+                                        jso[pluralize(paramName)] = object;
+                                    } else {
+                                        jso = {};
+                                        jso[paramName] = object;
+                                    }
+                                }
+                            }
+
+                            var filters = (post['message'] || []).slice();
+                            var next = function(err, res) {
+                                if(err) {
+                                    console.error(e.stack);
+                                    var json = JSON.stringify({ error: { type: 'server-error' }});
+
+                                    hres.set('Content-Type', 'application/json');
+                                    hres.set('Content-Length', json.length);
+                                    hres.send(json);
+                                    return;
+                                }
+
+                                var filter = filters.shift();
+                                if(!filter) {
+                                    if(!req.rawResponse) {
+                                        var json = JSON.stringify(res);
+
+                                        hres.set('Content-Type', 'application/json');
+                                        hres.set('Content-Length', json.length);
+                                        hres.send(json);
+                                    } else {
+                                        hres.end();
+                                    }
+                                    return;
+                                }
+
+                                filter(req, res, hres, next);
+                            };
+                            if(!req.rawResponse) next(null, jso);
+                            else next(null, object);
+                        });
+                        return;
+                    }
+
+                    filter(req, next);
+                };
+                next(null, { headers: req.headers, user: user, query: query });
             } catch(e) {
                 console.error(e.stack);
                 var json = JSON.stringify({ error: { type: 'server-error' }});
 
-                res.set('Content-Type', 'application/json');
-                res.set('Content-Length', json.length);
-                res.send(json);
+                hres.set('Content-Type', 'application/json');
+                hres.set('Content-Length', json.length);
+                hres.send(json);
             }
         };
     };
 
     var instanceHandler = function(method) {
-        return function(req, res) {
+        return function(req, hres) {
             var user, query;
             if(req.method === 'GET') {
                 query = expandMap(req.query);
@@ -419,47 +466,96 @@ module.exports = function(model, prototype) {
                 user = req.user;
             }
 
-            try {
-                method.call({ id: req.params[paramName] }, { headers: req.headers, user: user, query: query }, function (err, object) {
-                    var jso;
 
-                    if (err) {
-                        if(err.type) {
-                            jso = { error: {
-                                type: err.type,
-                                message: err.message,
-                                code: err.code
-                            } };
-                        } else {
-                            console.error(err.stack);
-                            jso = { error: { type: 'server-error' } };
-                        }
-                    } else {
-                        if(Array.isArray(object)) {
-                            jso = {
-                                length: typeof object.count === 'undefined' ? object.length : object.count,
-                                aggregates: object.aggregates
-                            };
-                            jso[pluralize(paramName)] = object;
-                        } else {
-                            jso = {};
-                            jso[paramName] = object;
-                        }
+
+            try {
+                var filters = (pre['message'] || []).slice();
+                var next = function(err, req) {
+                    if(err) {
+                        console.error(e.stack);
+                        var json = JSON.stringify({ error: { type: 'server-error' }});
+
+                        hres.set('Content-Type', 'application/json');
+                        hres.set('Content-Length', json.length);
+                        hres.send(json);
+                        return;
                     }
 
-                    var json = JSON.stringify(jso);
+                    var filter = filters.shift();
+                    if (!filter) {
+                        method.call({ id: this.params[paramName] }, req, function (err, object) {
+                            if(!req.rawResponse) {
+                                var jso;
 
-                    res.set('Content-Type', 'application/json');
-                    res.set('Content-Length', json.length);
-                    res.send(json);
-                });
+                                if (err) {
+                                    if (err.type) {
+                                        jso = { error: {
+                                            type: err.type,
+                                            message: err.message,
+                                            code: err.code
+                                        } };
+                                    } else {
+                                        console.error(err.stack);
+                                        jso = { error: { type: 'server-error' } };
+                                    }
+                                } else {
+                                    if (Array.isArray(object)) {
+                                        jso = {
+                                            length: typeof object.count === 'undefined' ? object.length : object.count,
+                                            aggregates: object.aggregates
+                                        };
+                                        jso[pluralize(paramName)] = object;
+                                    } else {
+                                        jso = {};
+                                        jso[paramName] = object;
+                                    }
+                                }
+                            }
+
+                            var filters = (post['message'] || []).slice();
+                            var next = function(err, res) {
+                                if(err) {
+                                    console.error(e.stack);
+                                    var json = JSON.stringify({ error: { type: 'server-error' }});
+
+                                    hres.set('Content-Type', 'application/json');
+                                    hres.set('Content-Length', json.length);
+                                    hres.send(json);
+                                    return;
+                                }
+
+                                var filter = filters.shift();
+                                if(!filter) {
+                                    if(!req.rawResponse) {
+                                        var json = JSON.stringify(res);
+
+                                        hres.set('Content-Type', 'application/json');
+                                        hres.set('Content-Length', json.length);
+                                        hres.send(json);
+                                    } else {
+                                        hres.end();
+                                    }
+                                    return;
+                                }
+
+                                filter(req, res, hres, next);
+                            };
+                            if(!req.rawResponse) next(null, jso);
+                            else next(null, object);
+                        });
+                        return;
+                    }
+
+                    filter(req, next);
+                }.bind(req);
+                next(null, { headers: req.headers, user: user, query: query });
             } catch(e) {
                 console.error(e.stack);
                 var json = JSON.stringify({ error: { type: 'server-error' }});
 
-                res.set('Content-Type', 'application/json');
-                res.set('Content-Length', json.length);
-                res.send(json);
+                hres.set('Content-Type', 'application/json');
+                hres.set('Content-Length', json.length);
+                hres.send(json);
             }
         };
     };
@@ -656,6 +752,18 @@ module.exports = function(model, prototype) {
     return constructor;
 };
 
+var pre = {}, post = {};
+
+module.exports.pre = function(message, filter) {
+    pre[message] = pre[message] || [];
+    pre[message].push(filter);
+};
+
+module.exports.post = function(message, filter) {
+    post[message] = post[message] || [];
+    post[message].unshift(filter);
+}
+
 var ApiObject = module.exports.ApiObject = function ApiObject() {};
 
 Object.defineProperty(module.exports, 'router', {
@@ -731,3 +839,6 @@ module.exports.catalog = function(baseUrl) {
 
     return router;
 };
+
+
+
