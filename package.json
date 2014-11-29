@@ -1,6 +1,6 @@
 {
   "name": "apiom",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "description": "API Object Model for JavaScript",
   "main": "index.js",
   "scripts": {},
