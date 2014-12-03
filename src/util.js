@@ -2,7 +2,14 @@
 
 module.exports = {
     routerConstructor: function () {
-        return require('express').Router();
+        var router = require('express').Router();
+        router.use(function(req, res, next) {
+            if(req.log) {
+                req.log = req.log.child({ apiom: true });
+            }
+            next();
+        });
+        return router;
     },
 
     expandMap: function (map) {

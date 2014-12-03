@@ -79,11 +79,11 @@ module.exports = function(model, prototype) {
     });
 
 
-    var staticHandler = handler(pre, post, function(method, req, next) {
+    var staticHandler = handler(constructor, pre, post, function(method, req, next) {
         return method.call(constructor, req, next);
     });
 
-    var instanceHandler = handler(pre, post, function(method, req, next) {
+    var instanceHandler = handler(constructor, pre, post, function(method, req, next) {
         return method.call({ id: this.params[paramName] }, req, next);
     });
 
@@ -123,7 +123,7 @@ module.exports = function(model, prototype) {
 
                 switch (key) {
                     case '$create':
-                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName, staticHandler(method.returnType, prototype.$create));
+                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName, staticHandler(method.returnType, prototype.$create, model, '.create'));
                         catalogEntry.methods.push({
                             accessor: 'static',
                             name: 'create',
@@ -150,7 +150,7 @@ module.exports = function(model, prototype) {
                         };
                         break;
                     case '$find':
-                        router[(method._httpMethod || 'GET').toLowerCase()]('/' + baseName, staticHandler(method.returnType, prototype.$find));
+                        router[(method._httpMethod || 'GET').toLowerCase()]('/' + baseName, staticHandler(method.returnType, prototype.$find, model, '.find'));
                         catalogEntry.methods.push({
                             accessor: 'static',
                             name: 'find',
@@ -165,7 +165,7 @@ module.exports = function(model, prototype) {
                     case '$findOne':
                         router[(method._httpMethod || 'GET').toLowerCase()]('/' + baseName + '/:' + paramName, function (req, res) {
                             (req.query[paramName] = {}).id = req.params[paramName];
-                            staticHandler(method.returnType, prototype.$findOne)(req, res);
+                            staticHandler(method.returnType, prototype.$findOne, model, '.findOne')(req, res);
                         });
                         catalogEntry.methods.push({
                             accessor: 'static',
@@ -181,7 +181,7 @@ module.exports = function(model, prototype) {
                         };
                         break;
                     default:
-                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName + '/' + methodName, staticHandler(method.returnType, prototype[key]));
+                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName + '/' + methodName, staticHandler(method.returnType, prototype[key], model, '.' + methodName));
                         catalogEntry.methods.push({
                             accessor: 'static',
                             name: key.substring(1),
@@ -201,7 +201,7 @@ module.exports = function(model, prototype) {
 
                 switch (key) {
                     case 'createChild':
-                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName + '/:' + paramName + '/children', instanceHandler(method.returnType, prototype.createChild));
+                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName + '/:' + paramName + '/children', instanceHandler(method.returnType, prototype.createChild, model, '#createChild'));
                         catalogEntry.methods.push({
                             accessor: 'instance',
                             name: 'createChild',
@@ -219,7 +219,7 @@ module.exports = function(model, prototype) {
                         });
                         break;
                     case 'children':
-                        router[(method._httpMethod || 'GET').toLowerCase()]('/' + baseName + '/:' + paramName + '/children', instanceHandler(method.returnType, prototype.children));
+                        router[(method._httpMethod || 'GET').toLowerCase()]('/' + baseName + '/:' + paramName + '/children', instanceHandler(method.returnType, prototype.children, model, '#children'));
                         catalogEntry.methods.push({
                             accessor: 'instance',
                             name: 'children',
@@ -237,7 +237,7 @@ module.exports = function(model, prototype) {
                         });
                         break;
                     case 'descendants':
-                        router[(method._httpMethod || 'GET').toLowerCase()]('/' + baseName + '/:' + paramName + '/descendants', instanceHandler(method.returnType, prototype.descendants));
+                        router[(method._httpMethod || 'GET').toLowerCase()]('/' + baseName + '/:' + paramName + '/descendants', instanceHandler(method.returnType, prototype.descendants, model, '#descendants'));
                         catalogEntry.methods.push({
                             accessor: 'instance',
                             name: 'descendants',
@@ -255,7 +255,7 @@ module.exports = function(model, prototype) {
                         });
                         break;
                     case 'save':
-                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName + '/:' + paramName, instanceHandler(method.returnType, prototype.save));
+                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName + '/:' + paramName, instanceHandler(method.returnType, prototype.save, model, '#save'));
                         catalogEntry.methods.push({
                             accessor: 'instance',
                             name: 'save',
@@ -275,7 +275,7 @@ module.exports = function(model, prototype) {
                         });
                         break;
                     case 'delete':
-                        router[(method._httpMethod || 'DELETE').toLowerCase()]('/' + baseName + '/:' + paramName, instanceHandler(method.returnType, prototype.delete));
+                        router[(method._httpMethod || 'DELETE').toLowerCase()]('/' + baseName + '/:' + paramName, instanceHandler(method.returnType, prototype.delete, model, '#delete'));
                         catalogEntry.methods.push({
                             accessor: 'instance',
                             name: 'delete',
@@ -293,7 +293,7 @@ module.exports = function(model, prototype) {
                         });
                         break;
                     default:
-                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName + '/:' + paramName + '/' + methodName, instanceHandler(method.returnType, prototype[key]));
+                        router[(method._httpMethod || 'POST').toLowerCase()]('/' + baseName + '/:' + paramName + '/' + methodName, instanceHandler(method.returnType, prototype[key], model, '#' + methodName));
                         catalogEntry.methods.push({
                             accessor: 'instance',
                             name: key,

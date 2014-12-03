@@ -1,15 +1,25 @@
 
 var util = require('./util');
+var domain = require('domain');
 
-module.exports = function(pre, post, impl) {
-    return function (returnType, method) {
-
+module.exports = function(constructor, pre, post, impl) {
+    return function (returnType, method, model, methodName) {
+        var returnModel = returnType;
         returnType = returnType.match(/[A-Z][^A-Z]+/g).map(function (token) {
             return token.toLowerCase();
         }).join('-');
         returnType = returnType[0].toLowerCase() + returnType.substring(1);
 
         return function (req, hres) {
+            if(req.log) {
+                req.log = req.log.child({ invocation: model.modelName + methodName });
+                req.log.trace({
+                    host: req.hostname,
+                    method: req.method,
+                    path: req.path
+                }, 'apiom method invocation');
+            }
+
             var user, query;
             if (req.method === 'GET') {
                 query = util.expandMap(req.query);
@@ -23,7 +33,7 @@ module.exports = function(pre, post, impl) {
                 var filters = (pre['message'] || []).slice();
                 var next = function (err, req) {
                     if (err) {
-                        console.error(e.stack);
+                        req.log.error({ stacktrace: err.stack }, err.message);
                         var json = JSON.stringify({error: {type: 'server-error'}});
 
                         hres.set('Content-Type', 'application/json');
@@ -48,7 +58,7 @@ module.exports = function(pre, post, impl) {
                                             }
                                         };
                                     } else {
-                                        console.error(err.stack);
+                                        req.log.error({ stacktrace: err.stack }, err.message);
                                         jso = {error: {type: 'server-error'}};
                                     }
                                 } else {
@@ -68,7 +78,7 @@ module.exports = function(pre, post, impl) {
                             var filters = (post['message'] || []).slice();
                             var next = function (err, res) {
                                 if (err) {
-                                    console.error(e.stack);
+                                    req.log.error({ stacktrace: err.stack }, err.message);
                                     var json = JSON.stringify({error: {type: 'server-error'}});
 
                                     hres.set('Content-Type', 'application/json');
@@ -101,9 +111,26 @@ module.exports = function(pre, post, impl) {
 
                     filter(req, next);
                 }.bind(req);
-                next(null, {headers: req.headers, user: user, query: query});
+                var d = domain.create();
+                d.on('error', function(err) {
+                    req.log.error({ stacktrace: err.stack }, err.message);
+                    if(!hres.headersSent) {
+                        hres.send({ error: { type: 'server-error' } });
+                    }
+                });
+                d.run(function() {
+                    process.nextTick(function apiom() {
+                        next(null, {
+                            headers: req.headers,
+                            user: user,
+                            query: query,
+                            id: req.id,
+                            log: req.log
+                        });
+                    });
+                });
             } catch (e) {
-                console.error(e.stack);
+                req.log.error({ stacktrace: err.stack }, err.message);
                 var json = JSON.stringify({error: {type: 'server-error'}});
 
                 hres.set('Content-Type', 'application/json');
