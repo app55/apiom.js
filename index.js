@@ -344,7 +344,23 @@ module.exports.pre = function(message, filter) {
 module.exports.post = function(message, filter) {
     post[message] = post[message] || [];
     post[message].unshift(filter);
-}
+};
+
+module.exports.callpre = function(message, self, args) {
+    args = Array.prototype.slice.call(arguments, 2);
+
+    (pre[message] || []).forEach(function(filter) {
+        filter.apply(self, args);
+    });
+};
+
+module.exports.callpost = function(message, self, args) {
+    args = Array.prototype.slice.call(arguments, 2);
+
+    (post[message] || []).forEach(function(filter) {
+        filter.apply(self, args);
+    });
+};
 
 var ApiObject = module.exports.ApiObject = function ApiObject() {};
 

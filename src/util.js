@@ -19,6 +19,7 @@ module.exports = {
         Object.keys(map).forEach(function (key) {
             var value = map[key], o = out, i;
 
+            key = key.replace(/\[([^\]]*)\]/g, '.$1');
             key = key.split(/\./g);
             for (i = 0; i < key.length - 1; i++) {
                 o[key[i]] = o[key[i]] || {};

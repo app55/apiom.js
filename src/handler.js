@@ -125,7 +125,8 @@ module.exports = function(constructor, pre, post, impl) {
                             user: user,
                             query: query,
                             id: req.id,
-                            log: req.log
+                            log: req.log,
+                            collector: req.collector
                         });
                     });
                 });
